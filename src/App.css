@@ -1,0 +1,65 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+
+body,
+html,
+#root {
+  margin: 0;
+  padding: 0;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  background: linear-gradient(135deg, #fff5f2 0%, #fdfbfb 100%);
+  min-height: 100vh;
+}
+
+/* Custom slick slider markers */
+.ant-slider-mark-text {
+  color: #a0aec0 !important;
+  font-weight: 500;
+  font-size: 12px;
+  margin-top: 12px !important; /* Pushed down slightly to clear the bigger handle */
+}
+
+.ant-slider-mark-text-active,
+.ant-picker-now-btn {
+  color: #ff7e67 !important;
+  font-weight: 700;
+}
+
+/* =========================================
+   NEW: Catchy, Thicker, Premium Sliders 
+   ========================================= */
+
+/* 1. Thicker Rail (the unfilled background line) */
+.ant-slider .ant-slider-rail {
+  height: 10px !important;
+  border-radius: 6px !important;
+  background-color: #e2e8f0 !important;
+}
+
+/* 2. Gradient Track (the filled line indicating time) */
+.ant-slider .ant-slider-track {
+  height: 10px !important;
+  border-radius: 6px !important;
+  background: linear-gradient(90deg, #ff7e67 0%, #ff5a5f 100%) !important;
+}
+
+/* 3. Bigger, bolder handle with shadows and a thick white border */
+.ant-slider .ant-slider-handle::after {
+  width: 26px !important;
+  height: 26px !important;
+  margin-top: -6px !important; /* Centers the larger handle on the 10px track */
+  box-shadow: 0 4px 10px rgba(255, 126, 103, 0.4) !important;
+  border: 4px solid #ffffff !important;
+  background-color: #ff5a5f !important;
+  transition:
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.2s ease !important;
+}
+
+/* 4. Playful "pop" animation when hovering or dragging the handle */
+.ant-slider:hover .ant-slider-handle::after,
+.ant-slider .ant-slider-handle:hover::after,
+.ant-slider .ant-slider-handle:focus::after {
+  transform: scale(1.25) !important;
+  box-shadow: 0 6px 16px rgba(255, 126, 103, 0.6) !important;
+  border-color: #ffffff !important;
+}
