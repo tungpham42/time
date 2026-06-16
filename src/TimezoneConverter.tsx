@@ -25,10 +25,27 @@ import dayjs from "dayjs";
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-// Extract all valid timezones
-const allTimezones = Object.values(ct.getAllTimezones()).sort((a, b) =>
-  a.name.localeCompare(b.name),
-);
+// Fetch all countries to map country codes to full names
+const allCountries = ct.getAllCountries();
+
+// Map and structure timezones to include clean city and country names
+const processedLocations = Object.values(ct.getAllTimezones())
+  .map((tz) => {
+    const city = tz.name.split("/").pop()?.replaceAll("_", " ") || tz.name;
+    const countryList = tz.countries.map(
+      (code) => allCountries[code]?.name || code,
+    );
+    const country = countryList.join(", ");
+
+    return {
+      id: tz.name,
+      city,
+      country,
+      utcOffsetStr: tz.utcOffsetStr,
+    };
+  })
+  // Sort alphabetically by City name
+  .sort((a, b) => a.city.localeCompare(b.city));
 
 // Map common abbreviations to their IANA timezone equivalents
 const commonAliases: Record<string, string[]> = {
@@ -271,41 +288,91 @@ const TimezoneConverter: React.FC = () => {
             >
               Add Location
             </Text>
-            <Space.Compact style={{ width: "100%" }}>
+            <Space.Compact style={{ width: "100%", display: "flex" }}>
               <Select
                 showSearch
                 size="large"
-                style={{ width: "100%" }}
-                placeholder="Search a city or timezone..."
+                // Force the Select to fill available space but allow it to shrink
+                style={{ flex: 1, minWidth: 0 }}
+                // Keep the dropdown the exact same width as the search box
+                popupMatchSelectWidth={true}
+                placeholder="Search a city or country..."
                 value={newZone}
                 onChange={(val) => setNewZone(val)}
                 filterOption={(input, option) => {
-                  const rawTzName = (option?.value as string).toLowerCase();
-                  const formattedTzName = rawTzName.replaceAll("_", " ");
                   const searchInput = input.toLowerCase();
+                  const city = (
+                    (option as any)?.["data-city"] || ""
+                  ).toLowerCase();
+                  const country = (
+                    (option as any)?.["data-country"] || ""
+                  ).toLowerCase();
+                  const rawTzName = (
+                    (option as any)?.value || ""
+                  ).toLowerCase();
 
+                  if (city.includes(searchInput)) return true;
+                  if (country.includes(searchInput)) return true;
                   if (rawTzName.includes(searchInput)) return true;
-                  if (formattedTzName.includes(searchInput)) return true;
 
-                  const aliases = commonAliases[option?.value as string] || [];
+                  const aliases =
+                    commonAliases[(option as any)?.value as string] || [];
                   return aliases.some((alias) =>
                     alias.toLowerCase().includes(searchInput),
                   );
                 }}
               >
-                {allTimezones.map((tz) => {
-                  const aliasText = commonAliases[tz.name]
-                    ? ` [${commonAliases[tz.name].join(", ")}]`
+                {processedLocations.map((loc) => {
+                  const aliasText = commonAliases[loc.id]
+                    ? ` [${commonAliases[loc.id].join(", ")}]`
                     : "";
                   return (
-                    <Option key={tz.name} value={tz.name}>
-                      {tz.name.replaceAll("_", " ")}
-                      <Text
-                        type="secondary"
-                        style={{ fontSize: "12px", marginLeft: "8px" }}
+                    <Option
+                      key={loc.id}
+                      value={loc.id}
+                      data-city={loc.city}
+                      data-country={loc.country}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          width: "100%",
+                          overflow: "hidden", // Prevent breaking outer bounds
+                        }}
                       >
-                        {aliasText} (UTC{tz.utcOffsetStr})
-                      </Text>
+                        <span
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap", // Shrink long names cleanly with '...'
+                            marginRight: "12px",
+                          }}
+                        >
+                          <strong>{loc.city}</strong>
+                          {loc.country && (
+                            <Text
+                              type="secondary"
+                              style={{ marginLeft: "6px" }}
+                            >
+                              ({loc.country})
+                            </Text>
+                          )}
+                          <Text
+                            type="secondary"
+                            style={{ fontSize: "12px", marginLeft: "8px" }}
+                          >
+                            {aliasText}
+                          </Text>
+                        </span>
+                        <Text
+                          type="secondary"
+                          style={{ fontSize: "12px", flexShrink: 0 }} // Protect the UTC badge from getting squished
+                        >
+                          UTC{loc.utcOffsetStr}
+                        </Text>
+                      </div>
                     </Option>
                   );
                 })}
@@ -334,126 +401,152 @@ const TimezoneConverter: React.FC = () => {
         dataSource={selectedZones}
         split={false}
         rowKey={(zone) => zone}
-        renderItem={(zone, index) => (
-          <div
-            draggable={draggableIndex === index} // <-- ONLY draggable if state matches
-            onDragStart={(e) => handleDragStart(e, index)}
-            onDragEnter={(e) => handleDragEnter(e, index)}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-            style={{
-              opacity: draggedIndex === index ? 0.4 : 1,
-              transition: "opacity 0.2s ease",
-            }}
-          >
-            <List.Item style={{ padding: "0 0 24px 0", border: "none" }}>
-              <Card
-                bordered={false}
-                style={{
-                  width: "100%",
-                  background:
-                    "linear-gradient(145deg, #ffffff 0%, #fafafa 100%)",
-                  borderRadius: "16px",
-                  border: "1px solid #f0f0f0",
-                }}
-                bodyStyle={{ padding: "20px 24px" }}
-              >
-                <Row
-                  justify="space-between"
-                  align="middle"
-                  style={{ marginBottom: "16px" }}
+        renderItem={(zone, index) => {
+          // Look up the city and country from our processed data
+          const locationInfo = processedLocations.find(
+            (loc) => loc.id === zone,
+          );
+          const cityName =
+            locationInfo?.city || zone.split("/").pop()?.replaceAll("_", " ");
+          const countryName = locationInfo?.country;
+
+          return (
+            <div
+              draggable={draggableIndex === index}
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragEnter={(e) => handleDragEnter(e, index)}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              style={{
+                opacity: draggedIndex === index ? 0.4 : 1,
+                transition: "opacity 0.2s ease",
+              }}
+            >
+              <List.Item style={{ padding: "0 0 24px 0", border: "none" }}>
+                <Card
+                  bordered={false}
+                  style={{
+                    width: "100%",
+                    background:
+                      "linear-gradient(145deg, #ffffff 0%, #fafafa 100%)",
+                    borderRadius: "16px",
+                    border: "1px solid #f0f0f0",
+                  }}
+                  styles={{ body: { padding: "20px 24px" } }}
                 >
-                  <Col style={{ display: "flex", alignItems: "center" }}>
-                    <div
-                      onMouseDown={() => setDraggableIndex(index)}
-                      onMouseUp={() => setDraggableIndex(null)}
-                      onTouchStart={() => setDraggableIndex(index)}
-                      onTouchEnd={() => setDraggableIndex(null)}
-                      style={{
-                        padding: "8px",
-                        margin: "-8px 8px -8px -8px", // Increases clickable hit area
-                        cursor: draggedIndex === index ? "grabbing" : "grab",
-                        display: "flex",
-                        alignItems: "center",
-                      }}
-                    >
-                      <HolderOutlined
+                  <Row
+                    justify="space-between"
+                    align="middle"
+                    style={{ marginBottom: "16px" }}
+                  >
+                    <Col style={{ display: "flex", alignItems: "center" }}>
+                      <div
+                        onMouseDown={() => setDraggableIndex(index)}
+                        onMouseUp={() => setDraggableIndex(null)}
+                        onTouchStart={() => setDraggableIndex(index)}
+                        onTouchEnd={() => setDraggableIndex(null)}
                         style={{
-                          fontSize: "20px",
-                          color: "#cbd5e1",
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <Title level={4} style={{ margin: 0, fontWeight: 700 }}>
-                        {zone.split("/").pop()?.replaceAll("_", " ")}
-                      </Title>
-                      <Text
-                        style={{
-                          color: "#718096",
-                          fontSize: "14px",
-                          fontWeight: 500,
+                          padding: "8px",
+                          margin: "-8px 8px -8px -8px",
+                          cursor: draggedIndex === index ? "grabbing" : "grab",
+                          display: "flex",
+                          alignItems: "center",
                         }}
                       >
-                        {formatDateForZone(exactTime, zone)}
-                      </Text>
-                    </div>
-                  </Col>
+                        <HolderOutlined
+                          style={{
+                            fontSize: "20px",
+                            color: "#cbd5e1",
+                          }}
+                        />
+                      </div>
+                      <div>
+                        {/* Updated Title area to include Country */}
+                        <Space align="baseline" size="small">
+                          <Title
+                            level={4}
+                            style={{ margin: 0, fontWeight: 700 }}
+                          >
+                            {cityName}
+                          </Title>
+                          {countryName && (
+                            <Text
+                              type="secondary"
+                              style={{ fontSize: "14px", fontWeight: 500 }}
+                            >
+                              {countryName}
+                            </Text>
+                          )}
+                        </Space>
+                        <div style={{ marginTop: "2px" }}>
+                          <Text
+                            style={{
+                              color: "#718096",
+                              fontSize: "14px",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {formatDateForZone(exactTime, zone)}
+                          </Text>
+                        </div>
+                      </div>
+                    </Col>
 
-                  {/* Updated Right Column with Time and Delete Button */}
-                  <Col
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "flex-end",
-                    }}
-                  >
-                    <div
+                    <Col
                       style={{
-                        fontSize: "32px",
-                        fontWeight: 800,
-                        background: "linear-gradient(45deg, #FF7E67, #FF5A5F)",
-                        WebkitBackgroundClip: "text",
-                        WebkitTextFillColor: "transparent",
-                        lineHeight: 1.1,
-                        marginRight: "16px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "flex-end",
                       }}
                     >
-                      {formatTimeForZone(exactTime, zone)}
-                    </div>
-                    <Button
-                      type="text"
-                      danger
-                      icon={<DeleteOutlined style={{ fontSize: "18px" }} />}
-                      onClick={() => handleRemoveZone(zone)}
-                      disabled={selectedZones.length <= 1}
-                    />
-                  </Col>
-                </Row>
+                      <div
+                        style={{
+                          fontSize: "32px",
+                          fontWeight: 800,
+                          background:
+                            "linear-gradient(45deg, #FF7E67, #FF5A5F)",
+                          WebkitBackgroundClip: "text",
+                          WebkitTextFillColor: "transparent",
+                          lineHeight: 1.1,
+                          marginRight: "16px",
+                        }}
+                      >
+                        {formatTimeForZone(exactTime, zone)}
+                      </div>
+                      <Button
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined style={{ fontSize: "18px" }} />}
+                        onClick={() => handleRemoveZone(zone)}
+                        disabled={selectedZones.length <= 1}
+                      />
+                    </Col>
+                  </Row>
 
-                <Row>
-                  <Col span={24}>
-                    <Slider
-                      min={0}
-                      max={1439}
-                      step={15}
-                      value={getTzTimeInMinutes(exactTime, zone)}
-                      onChange={(val) => handleZoneSliderChange(zone, val)}
-                      tooltip={{ formatter: sliderTooltipFormatter }}
-                      marks={{
-                        0: "12 AM",
-                        360: "6 AM",
-                        720: "12 PM",
-                        1080: "6 PM",
-                        1439: "11:59 PM",
-                      }}
-                    />
-                  </Col>
-                </Row>
-              </Card>
-            </List.Item>
-          </div>
-        )}
+                  <Row>
+                    <Col span={24}>
+                      <Slider
+                        min={0}
+                        max={1439}
+                        step={15}
+                        value={getTzTimeInMinutes(exactTime, zone)}
+                        onChange={(val) => handleZoneSliderChange(zone, val)}
+                        tooltip={{ formatter: sliderTooltipFormatter }}
+                        marks={{
+                          0: "12 AM",
+                          360: "6 AM",
+                          720: "12 PM",
+                          1080: "6 PM",
+                          1439: "11:59 PM",
+                        }}
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              </List.Item>
+            </div>
+          );
+        }}
       />
     </Card>
   );
